@@ -1,3 +1,4 @@
+<img width="1901" height="752" alt="image" src="https://github.com/user-attachments/assets/9a73856b-a7ad-471c-a773-195da6860091" />
 ## README: Macroeconomic and Labor Market Data Tracker
 
 This project is a Python-based utility designed to automate the collection of key economic indicators. It interfaces with two primary data sources: the **Federal Reserve Economic Data (FRED)** API and the **Bureau of Labor Statistics (BLS)** API.
