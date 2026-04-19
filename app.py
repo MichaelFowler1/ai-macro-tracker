@@ -1,114 +1,60 @@
+import pandas as pd
 import os
-import streamlit as st
-import altair as alt
 from dotenv import load_dotenv
-from macro_tracker import fetch_all_macro_data
+from fredapi import Fred
 
-load_dotenv()
-
-st.set_page_config(page_title="AI Job Impact Tracker", layout="wide")
-
-st.title("Macro Indicators of AI Job Displacement")
-st.write("Tracking the economic footprint of automation.")
-
-API_KEY = os.getenv("FRED_API_KEY")
-
-if not API_KEY:
-    st.error("API Key not found in .env")
-    st.stop()
-
-# cache fred api response
-@st.cache_data
-def load_data():
-    return fetch_all_macro_data(API_KEY)
-
-data = load_data()
-
-# helper for basic line charts
-def plot_locked_chart(series_data, line_color):
-    df = series_data.reset_index()
-    df.columns = ["Date", "Value"] 
-    chart = alt.Chart(df).mark_line(color=line_color).encode(
-        x=alt.X("Date:T", title=""),      
-        y=alt.Y("Value:Q", title="")      
-    )
-    st.altair_chart(chart, use_container_width=True)
-
-# --- Master Index ---
-st.header("The AI Displacement Risk Index (V1)")
-st.write("A custom composite index. **Rising values** indicate a macroeconomic shift favoring tech capital over human labor. (Base 100)")
-
-# expandable button for the math explanation
-with st.expander("How is this calculated?"):
-    st.markdown("""
-    **The Components:**
-    This index combines three distinct macroeconomic forces into a single score:
-    1. **Tech Capital:** Investment in software and hardware.
-    2. **Labor Productivity:** Nonfarm business sector output per hour.
-    3. **Hiring Demand:** Total nonfarm job openings rate.
+def fetch_all_macro_data(api_key):
+    fred = Fred(api_key=api_key)
     
-    **The Math:**
-    * **Alignment:** Since job openings are reported monthly and the others are quarterly, we resample everything to a standard quarterly timeline.
-    * **Base 100 Normalization:** You can't add billions of dollars to a percentage rate. We normalize all three metrics by setting their starting value to 100. 
-    * **Inversion:** We invert the job openings metric. If job openings fall, the displacement risk *rises*. (Formula: `200 - Normalized Job Openings`).
-    * **The Final Score:** We average the three normalized numbers together. If capital investment and productivity are climbing while hiring demand falls, the index spikes.
-    """)
-
-index_df = data["ai_displacement_index"].reset_index()
-index_df.columns = ["Date", "Index Value"]
-
-# main area chart
-index_chart = alt.Chart(index_df).mark_area(
-    color="#673ab7", 
-    line={'color': '#4527a0'},
-    opacity=0.3
-).encode(
-    x=alt.X("Date:T", title=""),
-    y=alt.Y("Index Value:Q", title="Displacement Risk Score", scale=alt.Scale(zero=False))
-).properties(height=350) 
-
-st.altair_chart(index_chart, use_container_width=True)
-
-# index roc
-st.subheader("Index Velocity")
-st.write("QoQ Growth (4-Quarter Rolling Avg)")
-index_roc = (data["ai_displacement_index"].pct_change() * 100).rolling(window=4).mean().dropna()
-plot_locked_chart(index_roc, "#d62728")
-
-st.write("---")
-
-# --- Breakdown ---
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.subheader("1. Tech Capital")
-    st.write("Investment in Software & Hardware (Billions)")
-    plot_locked_chart(data["total_tech_investment"], "#1f77b4") 
+    # --- Data Pulls ---
+    # V1 Basics
+    productivity = fred.get_series('OPHNFB').tail(40)
+    job_openings = fred.get_series('JTSJOR').tail(120)
+    software = fred.get_series('B985RC1Q027SBEA').tail(40)
+    hardware = fred.get_series('Y006RC1Q027SBEA').tail(40)
+    tech_invest = software + hardware
     
-    st.write("---") 
-    st.subheader("Investment Velocity")
-    st.write("QoQ Growth (4-Quarter Rolling Avg)")
-    tech_roc = (data["total_tech_investment"].pct_change() * 100).rolling(window=4).mean().dropna()
-    plot_locked_chart(tech_roc, "#d62728")
-
-with col2:
-    st.subheader("2. Labor Productivity")
-    st.write("Nonfarm Business Sector Productivity Index")
-    plot_locked_chart(data["productivity"], "#ff7f0e")
+    # V2 New Additions
+    grad_unemp = fred.get_series('LNS14027662').tail(120) # College Grad Unemployment
+    wages = fred.get_series('CES0500000003').tail(120)    # Avg Hourly Earnings
+    profits = fred.get_series('CP').tail(40)              # Corp Profits
     
-    st.write("---") 
-    st.subheader("Productivity Velocity")
-    st.write("QoQ Growth (4-Quarter Rolling Avg)")
-    prod_roc = (data["productivity"].pct_change() * 100).rolling(window=4).mean().dropna()
-    plot_locked_chart(prod_roc, "#d62728")
-
-with col3:
-    st.subheader("3. Job Openings Rate")
-    st.write("Total Nonfarm Job Openings Rate (%)")
-    plot_locked_chart(data["job_openings_rate"], "#2ca02c")
+    # --- Alignment & Merging ---
+    # Resample all to Quarterly ('QE') to match the slowest data points
+    df = pd.DataFrame({
+        'tech': tech_invest.resample('QE').last(),
+        'prod': productivity.resample('QE').last(),
+        'jobs': job_openings.resample('QE').mean(),
+        'grad_unemp': grad_unemp.resample('QE').mean(),
+        'wages': wages.resample('QE').mean(),
+        'profits': profits.resample('QE').last()
+    }).dropna()
     
-    st.write("---") 
-    st.subheader("Hiring Velocity")
-    st.write("MoM Growth (6-Month Rolling Avg)")
-    job_roc = (data["job_openings_rate"].pct_change() * 100).rolling(window=6).mean().dropna()
-    plot_locked_chart(job_roc, "#d62728")
+    # --- Index Math (Base 100) ---
+    for col in df.columns:
+        df[f'{col}_100'] = (df[col] / df[col].iloc[0]) * 100
+        
+    # Inversions (Lower values = Higher Risk)
+    df['jobs_inverse'] = 200 - df['jobs_100']
+    df['wages_inverse'] = 200 - df['wages_100']
+    
+    # Final V2 Index Calculation (Average of 6 factors)
+    # Higher = More displacement risk
+    df['ai_displacement_index'] = (
+        df['tech_100'] + 
+        df['prod_100'] + 
+        df['jobs_inverse'] + 
+        df['grad_unemp_100'] + 
+        df['wages_inverse'] + 
+        df['profits_100']
+    ) / 6
+    
+    return {
+        "productivity": productivity,
+        "job_openings_rate": job_openings,
+        "total_tech_investment": tech_invest,
+        "grad_unemp": grad_unemp,
+        "wages": wages,
+        "profits": profits,
+        "ai_displacement_index": df['ai_displacement_index']
+    }
