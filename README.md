@@ -1,63 +1,51 @@
-Here is a complete, professional `README.md` file you can copy and paste directly into your GitHub repository. It includes your chosen description, a breakdown of the data, and clear instructions for anyone who wants to download and run your code.
+## README: Macroeconomic and Labor Market Data Tracker
 
-```markdown
-# AI Job Displacement Macro Tracker
+This project is a Python-based utility designed to automate the collection of key economic indicators. It interfaces with two primary data sources: the **Federal Reserve Economic Data (FRED)** API and the **Bureau of Labor Statistics (BLS)** API.
 
-An interactive Python/Streamlit dashboard that aggregates real-time FRED API data to visualize the relationship between tech capital investment, labor productivity, and national hiring trends. It is designed to track the broader macroeconomic footprint of AI and automation over time.
+The system is built to provide a "local-first" data foundation for analyzing productivity, tech investment, and labor market trends (such as layoffs) without relying on manual downloads or cloud-based dashboards.
 
-## 📊 What This Dashboard Tracks
+---
 
-This tool pulls live data from the Federal Reserve Economic Data (FRED) API to measure three core areas:
+### Key Components
 
-1. **Tech Capital (Software & Hardware):** Measures total private investment in software and information processing equipment (semiconductors, servers, etc.), showing the physical and digital build-out of AI.
-2. **Labor Productivity:** Tracks the Nonfarm Business Sector Productivity Index to see if tech investments are actively making the existing workforce more efficient.
-3. **Job Openings Rate:** Monitors the Total Nonfarm Job Openings Rate to gauge the overall tightness or looseness of the U.S. labor market.
+#### 1. Data Sources
+* **FRED API:** Used to retrieve time-series data for business productivity and total technological investment.
+* **BLS API (v1):** Used to retrieve the "Layoffs and Discharges" series from the Job Openings and Labor Turnover Survey (JOLTS).
 
-Each metric is plotted alongside an **Investment/Productivity/Hiring Velocity** chart, which calculates the rolling rate-of-change to easily identify aggressive growth or contraction phases.
+#### 2. Core Functions
+* **`fetch_all_macro_data(api_key)`**:
+    * Initializes the FRED client using a provided API key.
+    * Retrieves specific series IDs (e.g., 'OPHNFB' for productivity).
+    * Returns a dictionary of Pandas Series for further analysis.
+* **`fetch_bls_layoffs()`**:
+    * Sends a POST request to the BLS API using a JSON payload.
+    * Navigates a nested JSON response to extract raw monthly layoff numbers.
+    * Includes error handling to return an empty DataFrame if the API connection fails or data is missing.
 
-## 🛠️ Tech Stack
+#### 3. Security and Configuration
+* **Environment Variables:** The project uses `python-dotenv` to load sensitive API credentials from a `.env` file. This ensures that secret keys are never hard-coded into the script.
+* **The `.env` File Requirement:**
+    `FRED_API_KEY=your_secret_key_here`
 
-* **Python** (Data fetching and logic)
-* **Streamlit** (Web framework and UI)
-* **Altair / Pandas** (Data manipulation and charting)
-* **FredAPI** (Direct connection to the St. Louis Fed database)
+---
 
-## 💻 How to Run Locally
+### Technical Workflow
 
-To run this dashboard on your own machine, follow these steps:
+1.  **Environment Setup:** The script checks for the existence of the `FRED_API_KEY`. If missing, the script terminates gracefully with an error message.
+2.  **Request & Authentication:** The script uses the `requests` library to handle HTTP communication. Authentication is managed via the API key for FRED and headers for the BLS.
+3.  **Data Processing:** Raw JSON and XML-style data are converted into **Pandas DataFrames**. This allows for immediate mathematical analysis, such as calculating the `tail()` to see the most recent trends.
+4.  **Error Handling:** The implementation uses `try-except` blocks to catch common API issues (like `KeyError` or `IndexError`), ensuring the program remains stable even if external servers return unexpected responses.
 
-### 1. Clone the repository
-```bash
-git clone [https://github.com/MichaelFowler1/ai-macro-tracker.git](https://github.com/MichaelFowler1/ai-macro-tracker.git)
-cd ai-macro-tracker
-```
+---
 
-### 2. Install dependencies
-Make sure you have Python installed, then run:
-```bash
-pip install -r requirements.txt
-```
+### Requirements
+* Python 3.x
+* `pandas`
+* `requests`
+* `python-dotenv`
+* `fredapi`
 
-### 3. Set up your API Key
-You will need a free API key from the St. Louis Fed. 
-1. Get a key at [FRED API](https://fred.stlouisfed.org/docs/api/api_key.html).
-2. Create a file named `.env` in the root folder of this project.
-3. Add your key to the `.env` file like this:
-```text
-FRED_API_KEY=your_32_character_api_key_here
-```
-*(Note: The `.gitignore` file ensures your API key is never uploaded to GitHub).*
+---
 
-### 4. Run the application
-```bash
-streamlit run app.py
-```
-A browser window should automatically open to `http://localhost:8501` displaying the live dashboard.
-
-## 📁 Project Structure
-
-* `app.py`: The main Streamlit frontend file containing the UI layout and chart rendering.
-* `macro_tracker.py`: The backend logic that authenticates the FRED API, fetches the specific data series, and performs the mathematical combinations (e.g., Software + Hardware).
-* `.env`: (User created) Stores the hidden API key.
-* `.gitignore`: Prevents sensitive files from being pushed to GitHub.
-* `requirements.txt`: Lists all Python packages required to run the app.
+### Execution
+The script is designed to be run as a standalone module. When executed, it triggers a "Pre-Flight Checklist" to verify API connectivity and prints a sample of the most recent data points to the terminal to confirm a successful pull.
