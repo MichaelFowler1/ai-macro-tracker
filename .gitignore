@@ -1,0 +1,11 @@
+# Secrets
+.env
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Python Cache (hidden files Python creates to run faster)
+__pycache__/
+*.pyc
