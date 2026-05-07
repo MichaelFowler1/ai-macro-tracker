@@ -1,52 +1,31 @@
-<img width="1901" height="752" alt="image" src="https://github.com/user-attachments/assets/9a73856b-a7ad-471c-a773-195da6860091" />
-## README: Macroeconomic and Labor Market Data Tracker
+# AI Job Displacement & Macroeconomic Tracker
 
-This project is a Python-based utility designed to automate the collection of key economic indicators. It interfaces with two primary data sources: the **Federal Reserve Economic Data (FRED)** API and the **Bureau of Labor Statistics (BLS)** API.
+I built this project because looking at aggregate national data often hides what is actually happening in specific sectors, especially tech. This is a local-first Streamlit dashboard that pulls from several government APIs to measure whether labor is losing leverage to tech capital. 
 
-The system is built to provide a "local-first" data foundation for analyzing productivity, tech investment, and labor market trends (such as layoffs) without relying on manual downloads or cloud-based dashboards.
+It tracks a mix of macroeconomic indicators and micro-level labor data, and calculates a dynamic risk index that you can adjust on the fly.
 
----
+### What it tracks
 
-### Key Components
+* **Macro trends:** Total tech investment, labor productivity, and national job openings.
+* **Labor health:** Recent graduate unemployment, average wage growth, and corporate profits.
+* **Micro tech trends:** Layoffs, hiring demand, and H-1B visa volume specifically within the Information Sector (software, data, and web).
 
-#### 1. Data Sources
-* **FRED API:** Used to retrieve time-series data for business productivity and total technological investment.
-* **BLS API (v1):** Used to retrieve the "Layoffs and Discharges" series from the Job Openings and Labor Turnover Survey (JOLTS).
+### Where the data comes from
 
-#### 2. Core Functions
-* **`fetch_all_macro_data(api_key)`**:
-    * Initializes the FRED client using a provided API key.
-    * Retrieves specific series IDs (e.g., 'OPHNFB' for productivity).
-    * Returns a dictionary of Pandas Series for further analysis.
-* **`fetch_bls_layoffs()`**:
-    * Sends a POST request to the BLS API using a JSON payload.
-    * Navigates a nested JSON response to extract raw monthly layoff numbers.
-    * Includes error handling to return an empty DataFrame if the API connection fails or data is missing.
+* **FRED (Federal Reserve Economic Data):** Used for the high-level macro series like productivity, wages, and capital investment.
+* **BLS (Bureau of Labor Statistics):** Used for highly specific JOLTS data. It uses the 21-character series IDs to isolate layoffs and job openings strictly within the Information Sector.
+* **USCIS (U.S. Citizenship and Immigration Services):** A custom scraper that downloads massive annual Employer Data Hub CSVs to see which corporate sponsors are utilizing the most tech-related H-1B visas.
 
-#### 3. Security and Configuration
-* **Environment Variables:** The project uses `python-dotenv` to load sensitive API credentials from a `.env` file. This ensures that secret keys are never hard-coded into the script.
-* **The `.env` File Requirement:**
-    `FRED_API_KEY=your_secret_key_here`
+### Project Structure
 
----
+* `app.py`: The main Streamlit dashboard containing the UI, charts, and the dynamic Z-score index calculator.
+* `macro_tracker.py`: Handles the FRED API connections and aligns the historical data to a fixed starting date.
+* `bls_extractor.py`: Connects to the BLS API to pull sector-specific labor turnover.
+* `h1b_extractor.py`: Spoofs browser headers to download raw USCIS CSVs, cleans the data, and aggregates total tech visa approvals by company.
 
-### Technical Workflow
+### How to run this locally
 
-1.  **Environment Setup:** The script checks for the existence of the `FRED_API_KEY`. If missing, the script terminates gracefully with an error message.
-2.  **Request & Authentication:** The script uses the `requests` library to handle HTTP communication. Authentication is managed via the API key for FRED and headers for the BLS.
-3.  **Data Processing:** Raw JSON and XML-style data are converted into **Pandas DataFrames**. This allows for immediate mathematical analysis, such as calculating the `tail()` to see the most recent trends.
-4.  **Error Handling:** The implementation uses `try-except` blocks to catch common API issues (like `KeyError` or `IndexError`), ensuring the program remains stable even if external servers return unexpected responses.
-
----
-
-### Requirements
-* Python 3.x
-* `pandas`
-* `requests`
-* `python-dotenv`
-* `fredapi`
-
----
-
-### Execution
-The script is designed to be run as a standalone module. When executed, it triggers a "Pre-Flight Checklist" to verify API connectivity and prints a sample of the most recent data points to the terminal to confirm a successful pull.
+**1. Install the dependencies**
+You will need Python 3 installed. Run this in your terminal:
+```bash
+pip install streamlit altair pandas requests python-dotenv fredapi
