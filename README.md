@@ -4,6 +4,10 @@ I built this project because looking at aggregate national data often hides what
 
 It tracks a mix of macroeconomic indicators and micro-level labor data, and calculates a dynamic risk index that you can adjust on the fly.
 
+![AI Displacement Risk Index dashboard](docs/hero.png)
+
+*The composite risk index is computed with `app.py`'s real Z-score formula over the 6 weighted factors; the input series shown here are illustrative stand-ins (the live app pulls them from FRED/BLS/USCIS with your API keys). Regenerate with `python make_hero.py`.*
+
 ### What it tracks
 
 * **Macro trends:** Total tech investment, labor productivity, and national job openings.
@@ -29,3 +33,16 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 You will need Python 3 installed. Run this in your terminal:
 ```bash
 pip install streamlit altair pandas requests python-dotenv fredapi
+```
+
+**2. Add your API keys**
+Create a `.env` file in the project root:
+```env
+FRED_API_KEY=your_fred_key
+BLS_API_KEY=your_bls_key
+```
+
+**3. Launch the dashboard**
+```bash
+streamlit run app.py
+```
