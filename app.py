@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 # Import your custom data extractors
 from macro_tracker import fetch_all_macro_data
 from bls_extractor import fetch_bls_data
+from nyfed_extractor import fetch_college_labor_data
 
 # Load environment variables
 load_dotenv()
@@ -38,9 +39,18 @@ def load_bls_tech_data():
         
     return layoffs, openings
 
+@st.cache_data(ttl=24 * 3600)  # NY Fed updates quarterly; re-download at most daily
+def load_nyfed_data():
+    try:
+        return fetch_college_labor_data()
+    except Exception as e:
+        print(f"Warning: NY Fed college labor data unavailable. Error: {e}")
+        return None
+
 # Load the raw data
 raw_macro_data = load_macro_data()
 raw_tech_layoffs, raw_tech_openings = load_bls_tech_data()
+raw_nyfed_data = load_nyfed_data()
 
 # --- SIDEBAR INTERACTIVITY ---
 st.sidebar.title("Dashboard Controls")
@@ -58,6 +68,7 @@ w_jobs = st.sidebar.slider("Job Openings Rate (-)", 0.0, 2.0, 1.0, 0.1)
 w_unemp = st.sidebar.slider("Grad Unemployment (+)", 0.0, 2.0, 1.0, 0.1)
 w_wage = st.sidebar.slider("Wage Growth (-)", 0.0, 2.0, 1.0, 0.1)
 w_prof = st.sidebar.slider("Corporate Profits (+)", 0.0, 2.0, 1.0, 0.1)
+w_underemp = st.sidebar.slider("Grad Underemployment (+)", 0.0, 2.0, 1.0, 0.1)
 
 # --- APPLY FILTERS ---
 macro_data = {}
@@ -72,6 +83,16 @@ tech_openings = pd.Series(dtype=float)
 if not raw_tech_openings.empty:
     tech_openings = raw_tech_openings[raw_tech_openings.index >= start_datetime]
 
+nyfed_unemp = pd.DataFrame()
+nyfed_underemp = pd.DataFrame()
+nyfed_majors = pd.DataFrame()
+if raw_nyfed_data is not None:
+    nyfed_unemp = raw_nyfed_data["unemployment"]
+    nyfed_unemp = nyfed_unemp[nyfed_unemp.index >= start_datetime]
+    nyfed_underemp = raw_nyfed_data["underemployment"]
+    nyfed_underemp = nyfed_underemp[nyfed_underemp.index >= start_datetime]
+    nyfed_majors = raw_nyfed_data["majors"]
+
 # --- HELPER FUNCTIONS ---
 def plot_locked_chart(series_data, line_color, title=""):
     """Generates a clean Altair line chart."""
@@ -85,6 +106,21 @@ def plot_locked_chart(series_data, line_color, title=""):
         x=alt.X("Date:T", title=""),      
         y=alt.Y("Value:Q", title=title, scale=alt.Scale(zero=False)),
         tooltip=["Date:T", "Value:Q"] 
+    )
+    st.altair_chart(chart, width="stretch")
+
+def plot_multiline_chart(df, y_title=""):
+    """Line chart comparing several series from one DataFrame."""
+    if df.empty:
+        st.warning("No data available for this timeframe.")
+        return
+
+    long_df = df.reset_index().melt("Date", var_name="Series", value_name="Value")
+    chart = alt.Chart(long_df).mark_line().encode(
+        x=alt.X("Date:T", title=""),
+        y=alt.Y("Value:Q", title=y_title, scale=alt.Scale(zero=False)),
+        color=alt.Color("Series:N", legend=alt.Legend(orient="bottom", title=None)),
+        tooltip=["Date:T", "Series:N", alt.Tooltip("Value:Q", format=".2f")]
     )
     st.altair_chart(chart, width="stretch")
 
@@ -106,15 +142,20 @@ def normalize_series(series):
 
 # --- DYNAMIC INDEX CALCULATION ---
 try:
-    df_index = pd.DataFrame({
+    index_factors = {
         'tech': normalize_series(macro_data["total_tech_investment"]) * w_tech,
         'prod': normalize_series(macro_data["productivity"]) * w_prod,
-        'jobs': -normalize_series(macro_data["job_openings_rate"]) * w_jobs, 
+        'jobs': -normalize_series(macro_data["job_openings_rate"]) * w_jobs,
         'unemp': normalize_series(macro_data["grad_unemp"]) * w_unemp,
-        'wage': -normalize_series(macro_data["wages"]) * w_wage, 
+        'wage': -normalize_series(macro_data["wages"]) * w_wage,
         'prof': normalize_series(macro_data["profits"]) * w_prof
-    }).dropna()
-    
+    }
+    # Underemployment (grads stuck in jobs not requiring a degree) captures
+    # displacement that never shows up in the unemployment rate.
+    if not nyfed_underemp.empty:
+        index_factors['underemp'] = normalize_series(nyfed_underemp["Recent graduates"]) * w_underemp
+
+    df_index = pd.DataFrame(index_factors).dropna()
     df_index['Dynamic_Risk_Score'] = df_index.sum(axis=1)
 except KeyError:
     st.error("Missing expected data keys. Check API limits or variable names.")
@@ -124,8 +165,9 @@ except KeyError:
 st.title("Macro Indicators of AI Job Displacement")
 st.write("Tracking the economic footprint of automation.")
 
+n_factors = len(index_factors)
 st.header("The AI Displacement Risk Index (Dynamic)")
-st.write("A composite index tracking 6 macro-factors. **Rising values** indicate labor losing leverage to tech capital.")
+st.write(f"A composite index tracking {n_factors} macro-factors. **Rising values** indicate labor losing leverage to tech capital.")
 
 if not df_index.empty:
     idx_df = df_index['Dynamic_Risk_Score'].reset_index()
@@ -177,8 +219,23 @@ with c5:
 with c6:
     st.subheader("Corporate Profits")
     plot_locked_chart(macro_data["profits"], "#e377c2")
-    change = get_yoy_change(macro_data["profits"], periods=4) 
+    change = get_yoy_change(macro_data["profits"], periods=4)
     st.metric("Total Profits", f"${macro_data['profits'].iloc[-1]:.1f}B", f"{change:.2f}% YoY" if change else "N/A")
+
+st.subheader("Unemployment by Education & Age (FRED)")
+st.write(
+    "Does more education still protect you? If AI is eating entry-level knowledge work, "
+    "the youngest bachelor's cohort should decouple from the older and more credentialed ones. "
+    "Series are not seasonally adjusted, so a 3-month moving average is applied to cut the noise."
+)
+edu_ladder = pd.DataFrame({
+    "Bachelor's, 20-24": macro_data["grad_unemp"],
+    "Bachelor's, 25-34": macro_data["grad_unemp_2534"],
+    "Bachelor's, 25+": macro_data["grad_unemp_25o"],
+    "Master's, 25+": macro_data["master_unemp_25o"],
+}).rolling(3).mean().dropna(how="all")
+edu_ladder.index.name = "Date"
+plot_multiline_chart(edu_ladder, "Unemployment Rate (%, 3-mo MA)")
 
 st.write("---")
 
@@ -203,8 +260,70 @@ with c8:
     st.subheader("Tech Job Openings (Thousands)")
     st.write("Information Sector Hiring Demand")
     if not tech_openings.empty:
-        plot_locked_chart(tech_openings, "#2ca02c") 
+        plot_locked_chart(tech_openings, "#2ca02c")
         change = get_yoy_change(tech_openings, periods=12)
         st.metric("Latest Openings", f"{tech_openings.iloc[-1]}k", f"{change:.2f}% YoY" if change else "N/A")
     else:
         st.warning("Awaiting BLS Data...")
+
+st.write("---")
+
+# --- ROW 4: THE GRADUATE SQUEEZE (NY FED) ---
+st.header("Phase 4: The Graduate Squeeze (NY Fed)")
+st.write(
+    "From the NY Fed's [Labor Market for Recent College Graduates]"
+    "(https://www.newyorkfed.org/research/college-labor-market). "
+    "Recent grads are the canary: entry-level roles are the first to be automated away."
+)
+
+if raw_nyfed_data is None:
+    st.warning("Awaiting NY Fed Data... (download failed; dashboard is running without it)")
+else:
+    c9, c10 = st.columns(2)
+
+    with c9:
+        st.subheader("Unemployment: Grads vs. Everyone")
+        st.write("Historically recent grads ran *below* all workers. The inversion is the story.")
+        plot_multiline_chart(nyfed_unemp[["Recent graduates", "All workers"]], "Unemployment Rate (%)")
+        if not nyfed_unemp.empty:
+            gap = nyfed_unemp["Recent graduates"].iloc[-1] - nyfed_unemp["All workers"].iloc[-1]
+            st.metric("Grad Gap (Recent Grads − All Workers)", f"{gap:+.2f} pts",
+                      "Grads doing worse than average" if gap > 0 else "Grads doing better than average",
+                      delta_color="inverse" if gap > 0 else "normal")
+
+    with c10:
+        st.subheader("Grad Underemployment")
+        st.write("Share of recent grads in jobs that don't require a degree.")
+        if not nyfed_underemp.empty:
+            plot_locked_chart(nyfed_underemp["Recent graduates"], "#d62728", "Underemployment Rate (%)")
+            change = get_yoy_change(nyfed_underemp["Recent graduates"], periods=12)
+            st.metric("Latest Rate", f"{nyfed_underemp['Recent graduates'].iloc[-1]:.1f}%",
+                      f"{change:.2f}% YoY" if change else "N/A", delta_color="inverse")
+
+    st.subheader("Unemployment by Major: Is Tech Still a Safe Bet?")
+    if not nyfed_majors.empty:
+        majors_df = nyfed_majors.reset_index()
+        tech_majors = ["Computer Science", "Computer Engineering", "Information Systems & Management"]
+        overall_rate = nyfed_majors.loc["Overall", "Unemployment Rate"] if "Overall" in nyfed_majors.index else None
+
+        top = majors_df[majors_df["Major"] != "Overall"].nlargest(15, "Unemployment Rate")
+        top["Group"] = top["Major"].apply(lambda m: "Tech" if m in tech_majors else "Other")
+
+        bars = alt.Chart(top).mark_bar().encode(
+            x=alt.X("Unemployment Rate:Q", title="Unemployment Rate (%)"),
+            y=alt.Y("Major:N", sort="-x", title=""),
+            color=alt.Color("Group:N",
+                            scale=alt.Scale(domain=["Tech", "Other"], range=["#d62728", "#9e9e9e"]),
+                            legend=None),
+            tooltip=["Major:N", alt.Tooltip("Unemployment Rate:Q", format=".2f"),
+                     alt.Tooltip("Underemployment Rate:Q", format=".2f"),
+                     alt.Tooltip("Median Wage Early Career:Q", format="$,.0f")]
+        ).properties(height=400)
+
+        if overall_rate is not None:
+            rule = alt.Chart(pd.DataFrame({"x": [overall_rate]})).mark_rule(
+                color="#673ab7", strokeDash=[6, 4]
+            ).encode(x="x:Q")
+            bars = bars + rule
+            st.write(f"Top 15 majors by unemployment rate. Dashed line = overall average ({overall_rate:.1f}%). Tech majors in red.")
+        st.altair_chart(bars, width="stretch")
