@@ -6,7 +6,7 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 
 ![AI Displacement Risk Index dashboard](docs/hero.png)
 
-*The composite risk index is computed with `app.py`'s real Z-score formula over the 6 weighted factors; the input series shown here are illustrative stand-ins (the live app pulls them from FRED/BLS/USCIS with your API keys). Regenerate with `python make_hero.py`.*
+*The composite risk index is computed with `app.py`'s real Z-score formula over the 7 weighted factors, from live data pulled from FRED and the NY Fed at generation time. Regenerate with `python make_hero.py`.*
 
 ### What it tracks
 
