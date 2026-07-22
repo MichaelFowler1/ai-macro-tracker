@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "ai-macro-tracker"
+abstract: "An interactive Python/Streamlit dashboard that aggregates real-time FRED API data to visualize the relationship between tech capital investment, labor productivity, and national hiring trends. It is designed to track the broader macroeconomic footprint of AI and automation over time."
+authors:
+  - family-names: "Fowler"
+    given-names: "Michael"
+    alias: "MichaelFowler1"
+repository-code: "https://github.com/MichaelFowler1/ai-macro-tracker"
+url: "https://github.com/MichaelFowler1/ai-macro-tracker"
+license: "Apache-2.0"
+date-released: "2026-04-19"
