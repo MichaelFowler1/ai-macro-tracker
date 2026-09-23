@@ -42,6 +42,8 @@ def fetch_all_macro_data(api_key=None, start_date="2014-01-01"):
         "grad_unemp_2534": "CGBD2534",   # Bachelor's, 25-34 years old
         "grad_unemp_25o": "CGBD25O",     # Bachelor's, 25 and over
         "master_unemp_25o": "CGMD25O",   # Master's, 25 and over
+        "unemp_2024": "LNU04000036",     # Everyone 20-24 years old (same survey, also not seasonally adjusted)
+        "labor_share": "PRS85006173",    # Nonfarm business labor share, 2017=100
         "wages": "CES0500000003",        # Avg Hourly Earnings
         "profits": "CP",                 # Corporate Profits
         "cpi": "CPIAUCSL"                # CPI, to turn nominal growth into real growth
@@ -65,6 +67,13 @@ def fetch_all_macro_data(api_key=None, start_date="2014-01-01"):
     else:
         data["total_tech_investment"] = pd.Series(dtype=float)
 
+    # Young grads vs. everyone their age. Age and the business cycle hit both
+    # groups, so what's left is the value of the degree itself.
+    if not data["grad_unemp"].empty and not data["unemp_2024"].empty:
+        data["young_grad_gap"] = (data["grad_unemp"] - data["unemp_2024"]).dropna()
+    else:
+        data["young_grad_gap"] = pd.Series(dtype=float)
+
     # 4. Clean up any trailing NaN values (if one series hasn't released this month's data yet)
     for key in data:
         if not data[key].empty:
@@ -79,6 +88,8 @@ def fetch_all_macro_data(api_key=None, start_date="2014-01-01"):
         "grad_unemp_2534": data["grad_unemp_2534"],
         "grad_unemp_25o": data["grad_unemp_25o"],
         "master_unemp_25o": data["master_unemp_25o"],
+        "young_grad_gap": data["young_grad_gap"],
+        "labor_share": data["labor_share"],
         "wages": data["wages"],
         "profits": data["profits"],
         "cpi": data["cpi"]

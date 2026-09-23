@@ -11,19 +11,20 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 ### What it tracks
 
 * **Macro trends:** Total tech investment, labor productivity, and national job openings.
-* **Labor health:** Recent graduate unemployment, average wage growth, and corporate profits.
+* **Labor health:** Recent graduate unemployment, average wage growth, corporate profits, and labor's share of output.
 * **Micro tech trends:** Layoffs and hiring demand specifically within the Information Sector (software, data, and web).
 * **The graduate squeeze:** Recent-grad unemployment versus all workers, grad underemployment, and outcomes by college major (is Computer Science still a safe bet?).
 
 ### How the risk index works
 
-Every factor gets put on the same footing before it's added up:
+Every factor gets put on the same footing before it's combined:
 
-1. **Things that grow on their own become growth rates.** Tech investment, productivity, wages, and corporate profits all trend up over time no matter what AI is doing, so the index uses their year-over-year growth instead. The three dollar series have CPI inflation subtracted, which matters a lot in 2021-2023: nominal wages were rising fast but real wages were falling.
-2. **Rates stay as rates.** The job openings rate, recent-grad unemployment, and grad underemployment already mean something on their own. Grad unemployment isn't seasonally adjusted, so it gets a 3-month average.
-3. **Everything is scored against 2015-2019.** Each factor becomes a Z-score relative to its pre-pandemic, pre-LLM average. So 0 is "normal," and +2 means two standard deviations worse for labor than that stretch was.
-4. **Signs point the same way.** Factors where a higher number is good for workers (job openings, real wage growth) are flipped, so up always means more risk.
-5. **Weighted sum.** The sidebar sliders set each factor's weight. Changing the start date only crops the chart; it doesn't rescore anything.
+1. **Things that trend on their own become growth rates.** Tech investment, productivity, wages, and labor share all drift over time no matter what AI is doing, so the index uses their year-over-year change instead. Tech investment and wages have CPI inflation subtracted, which matters a lot in 2021-2023: nominal wages were rising fast but real wages were falling.
+2. **Rates stay as rates.** The job openings rate and grad underemployment already mean something on their own.
+3. **Grads are compared to their own age group.** A recession pushes up unemployment for everyone, so raw grad unemployment mostly tracks the business cycle. The index uses the gap between bachelor's holders aged 20-24 and everyone aged 20-24 instead. Age and the cycle hit both groups, so what's left is what the degree is worth. In 2014 young grads' unemployment ran about 4 points below their peers'; in 2026 the edge is down to about half a point. Both series come from the same survey and aren't seasonally adjusted, so the gap gets a 3-month average.
+4. **Labor share is the most direct measure.** It's workers' share of business output, which is pretty much the definition of labor losing leverage to capital.
+5. **Everything is scored against 2015-2019.** Each factor becomes a Z-score relative to its pre-pandemic, pre-LLM average, and factors where a higher number is good for workers get flipped. So 0 is "normal" and up always means more risk.
+6. **Weighted average.** The sidebar sliders set each factor's weight, and the index is the weighted average, so +1 means one standard deviation worse for labor than 2015-2019. Because it's an average, the scale doesn't shift if a source fails to load. Changing the start date only crops the chart; it doesn't rescore anything.
 
 Quarterly series fill the months inside their own quarter and nothing past it, so the index is monthly and ends at the last month every factor has data for. The math lives in `risk_index.py`, which both the dashboard and `make_hero.py` import.
 

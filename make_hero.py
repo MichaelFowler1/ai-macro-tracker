@@ -42,8 +42,8 @@ macro["underemp"] = fetch_college_labor_data()["underemployment"]["Recent gradua
 scores = factor_scores(macro)
 scores = scores[scores.index >= START]
 risk = risk_index(scores)
-COLORS = {"tech": "#1f77b4", "prod": "#ff7f0e", "jobs": "#2ca02c", "unemp": "#9467bd",
-          "wage": "#8c564b", "prof": "#e377c2", "underemp": "#d62728"}
+COLORS = {"tech": "#1f77b4", "prod": "#ff7f0e", "jobs": "#2ca02c", "gap": "#9467bd",
+          "wage": "#8c564b", "labshare": "#e377c2", "underemp": "#d62728"}
 print(f"[*] Index: {len(risk)} points, {risk.index[0]:%b %Y} -> {risk.index[-1]:%b %Y}")
 
 plt.rcParams.update({"font.family": "DejaVu Sans", "text.color": INK,
@@ -66,11 +66,11 @@ ax.text(START + pd.Timedelta(days=12), ax.get_ylim()[1] * 0.86,
         " late-2022 LLM inflection\n (dashboard start)", color="#ff9800", fontsize=8)
 ax.xaxis.set_major_locator(mdates.AutoDateLocator())
 ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
-ax.set_ylabel("Relative Risk Score (Z)", fontsize=9)
+ax.set_ylabel("SDs from 2015-2019 normal", fontsize=9)
 ax.tick_params(colors=DIM, labelsize=8)
 ax.grid(color="#12203a", lw=0.6)
 ax.set_xlim(START, risk.index[-1])  # keep the LLM-inflection marker in frame
-ax.set_title("The AI Displacement Risk Index (Dynamic): Z-scores vs. the pre-pandemic baseline, weights adjustable live",
+ax.set_title("The AI Displacement Risk Index (Dynamic): weighted average of Z-scores vs. the pre-pandemic baseline",
              fontsize=9.5, color=DIM, loc="left", pad=6)
 
 # ---- bottom: the contributing factors (already signed, so up = more risk) ----
@@ -85,7 +85,7 @@ for i, k in enumerate(scores.columns):
     for sp in axp.spines.values():
         sp.set_edgecolor("#1b2740")
     up = z.iloc[-1] >= z.iloc[0]
-    axp.set_title(name.replace("Real Corporate Profit", "Real Profit"), fontsize=7.6, color=INK, loc="left", pad=3)
+    axp.set_title(name, fontsize=7.6, color=INK, loc="left", pad=3)
     axp.text(0.02, 0.06, "up = more risk" if sign > 0 else "inverted: up = more risk",
              transform=axp.transAxes, fontsize=7.2, color=DIM)
     axp.text(0.97, 0.85, "▲" if up else "▼", transform=axp.transAxes,

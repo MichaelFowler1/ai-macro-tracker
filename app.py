@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from macro_tracker import fetch_all_macro_data
 from bls_extractor import fetch_bls_data
 from nyfed_extractor import fetch_college_labor_data
-from risk_index import FACTORS, BASELINE, factor_scores, risk_index
+from risk_index import FACTORS, BASELINE, factor_scores, contributions
 
 # Load environment variables
 load_dotenv()
@@ -140,10 +140,9 @@ if raw_nyfed_data is not None:
     index_sources["underemp"] = raw_nyfed_data["underemployment"]["Recent graduates"]
 
 all_scores = factor_scores(index_sources)
-contributions = all_scores.mul(pd.Series(weights)[all_scores.columns], axis=1)
-contributions = contributions[contributions.index >= start_datetime]
-risk_score = risk_index(all_scores, weights)
-risk_score = risk_score[risk_score.index >= start_datetime]
+factor_shares = contributions(all_scores, weights)
+factor_shares = factor_shares[factor_shares.index >= start_datetime]
+risk_score = factor_shares.sum(axis=1)
 
 # --- MAIN UI ---
 st.title("Macro Indicators of AI Job Displacement")
@@ -152,10 +151,10 @@ st.write("Tracking the economic footprint of automation.")
 n_factors = all_scores.shape[1]
 st.header("The AI Displacement Risk Index (Dynamic)")
 st.write(
-    f"A composite of {n_factors} factors, each measured in standard deviations from its "
-    f"{BASELINE[0][:4]}-{BASELINE[1][:4]} average. **0 is the pre-pandemic normal**; "
-    "rising values mean labor is losing leverage to tech capital. Dollar series are growth rates "
-    "net of CPI inflation, so they don't trend up on their own."
+    f"The weighted average of {n_factors} factors, each measured in standard deviations from its "
+    f"{BASELINE[0][:4]}-{BASELINE[1][:4]} average. **0 is the pre-pandemic normal** and +1 means "
+    "labor is one standard deviation worse off than that. Dollar series are growth rates net of "
+    "CPI inflation, so they don't trend up on their own."
 )
 
 if not risk_score.empty:
@@ -165,18 +164,18 @@ if not risk_score.empty:
         color="#673ab7", line={'color': '#4527a0'}, opacity=0.3
     ).encode(
         x=alt.X("Date:T", title=""),
-        y=alt.Y("Value:Q", title="Relative Risk Score", scale=alt.Scale(zero=False)),
+        y=alt.Y("Value:Q", title="SDs from 2015-2019 normal", scale=alt.Scale(zero=False)),
         tooltip=["Date:T", alt.Tooltip("Value:Q", format=".2f")]
     ).properties(height=350) 
     zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="#9e9e9e", strokeDash=[4, 4]).encode(y="y:Q")
     st.altair_chart(index_chart + zero, width="stretch")
 
-    latest = contributions.iloc[-1].rename(index={k: FACTORS[k][0] for k in FACTORS}).reset_index()
+    latest = factor_shares.iloc[-1].rename(index={k: FACTORS[k][0] for k in FACTORS}).reset_index()
     latest.columns = ["Factor", "Contribution"]
-    st.subheader(f"What's driving it ({contributions.index[-1]:%b %Y})")
-    st.write("Each factor's weighted Z-score. Bars to the right push the index up.")
+    st.subheader(f"What's driving it ({factor_shares.index[-1]:%b %Y})")
+    st.write("How much each factor adds to the latest reading. The bars sum to the index.")
     drivers = alt.Chart(latest).mark_bar().encode(
-        x=alt.X("Contribution:Q", title="Weighted Z-score"),
+        x=alt.X("Contribution:Q", title="Contribution to index"),
         y=alt.Y("Factor:N", sort="-x", title=""),
         color=alt.condition(alt.datum.Contribution > 0, alt.value("#d62728"), alt.value("#2ca02c")),
         tooltip=["Factor:N", alt.Tooltip("Contribution:Q", format="+.2f")]

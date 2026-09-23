@@ -8,6 +8,9 @@ and rates stay as rates.
 Every factor is then Z-scored against a fixed pre-pandemic baseline
 (2015-2019), so 0 means "normal before COVID and before LLMs" and a value
 doesn't change when you move the dashboard's start date.
+
+The index is the weighted average of those Z-scores, so it stays in
+standard-deviation units however many factors loaded.
 """
 import pandas as pd
 
@@ -19,9 +22,9 @@ FACTORS = {
     "tech":     ("Real Tech Investment Growth", +1, "real_yoy_q", "total_tech_investment"),
     "prod":     ("Productivity Growth", +1, "yoy_q", "productivity"),
     "jobs":     ("Job Openings Rate", -1, "level", "job_openings_rate"),
-    "unemp":    ("Grad Unemployment", +1, "ma3", "grad_unemp"),
+    "gap":      ("Young Grad Gap", +1, "ma3", "young_grad_gap"),
     "wage":     ("Real Wage Growth", -1, "real_yoy_m", "wages"),
-    "prof":     ("Real Corporate Profit Growth", +1, "real_yoy_q", "profits"),
+    "labshare": ("Labor Share Change", -1, "yoy_q", "labor_share"),
     "underemp": ("Grad Underemployment", +1, "level", "underemp"),
 }
 
@@ -73,8 +76,18 @@ def factor_scores(sources):
     return pd.DataFrame(scores).dropna()
 
 
-def risk_index(scores, weights=None):
-    """Weighted sum of factor Z-scores. weights: dict key -> float (default 1)."""
+def contributions(scores, weights=None):
+    """
+    Each factor's share of the index: weight * Z-score / total weight.
+    Summing across a row gives the index. weights: dict key -> float (default 1).
+    """
     weights = weights or {}
-    w = pd.Series({k: weights.get(k, 1.0) for k in scores.columns})
-    return (scores * w).sum(axis=1)
+    w = pd.Series({k: weights.get(k, 1.0) for k in scores.columns}, dtype=float)
+    if w.sum() == 0:
+        return scores * 0
+    return scores * w / w.sum()
+
+
+def risk_index(scores, weights=None):
+    """Weighted average of factor Z-scores."""
+    return contributions(scores, weights).sum(axis=1)
