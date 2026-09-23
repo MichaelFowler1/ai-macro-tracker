@@ -1,0 +1,25 @@
+ai-macro-tracker
+Copyright 2026 Michael Fowler
+https://github.com/MichaelFowler1/ai-macro-tracker
+
+Required Notice: Copyright 2026 Michael Fowler (https://github.com/MichaelFowler1/ai-macro-tracker)
+
+This software is licensed under the PolyForm Noncommercial License 1.0.0 (see
+LICENSE, or https://polyformproject.org/licenses/noncommercial/1.0.0). Anyone
+who passes on a copy of any part of it has to pass on those terms, or their URL,
+and the Required Notice line above along with it.
+
+Any noncommercial purpose is free, and so is use by a charitable organization,
+educational institution, public research organization, public safety or health
+organization, environmental protection organization or government institution,
+whatever its funding. Commercial use needs a separate license from the author:
+ask through https://github.com/MichaelFowler1/ai-macro-tracker/issues.
+
+Third-party material in this repository keeps its own terms, which this
+license does not replace:
+
+- data/ai_exposure_employment.csv is a summary table built by cps_extractor.py from US Census Bureau Current Population Survey public-use microdata (US government work, public domain), with occupations grouped into exposure quintiles derived from the Eloundou et al. (2023) "GPTs are GPTs" occupation scores (github.com/openai/GPTs-are-GPTs), which stay under that project's own terms.
+
+Earlier versions: every commit published before this license change was
+released under the Apache License 2.0 and stays under it. The PolyForm
+Noncommercial terms cover everything after it.
