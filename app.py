@@ -9,6 +9,7 @@ from macro_tracker import fetch_all_macro_data
 from bls_extractor import fetch_bls_data
 from nyfed_extractor import fetch_college_labor_data
 from risk_index import FACTORS, BASELINE, factor_scores, contributions
+from cps_extractor import load_exposure_table, exposed_share_index
 
 # Load environment variables
 load_dotenv()
@@ -328,3 +329,58 @@ else:
             bars = bars + rule
             st.write(f"Top 15 majors by unemployment rate. Dashed line = overall average ({overall_rate:.1f}%). Tech majors in red.")
         st.altair_chart(bars, width="stretch")
+
+st.write("---")
+
+# --- ROW 5: WHO WORKS IN AI-EXPOSED JOBS (CPS MICRODATA) ---
+st.header("Phase 5: Are Young Workers Being Squeezed Out of AI-Exposed Jobs? (CPS)")
+st.write(
+    "The test from Brynjolfsson, Chandar & Chen's *Canaries in the Coal Mine* (2025), rebuilt from public "
+    "Census microdata. Every worker's occupation is scored for LLM exposure "
+    "([Eloundou et al. 2023](https://arxiv.org/abs/2303.10130)) and occupations are split into fifths by "
+    "2019 employment. If AI is replacing entry-level work, **the youngest line should fall while older "
+    "workers hold steady**. A recession or a small graduating class hits every job in an age group at "
+    "once, so it doesn't move these shares."
+)
+
+exposure_table = load_exposure_table()
+if exposure_table is None:
+    st.warning("CPS summary not built yet. Run `python cps_extractor.py` (one-time download of about 1.7GB).")
+else:
+    c11, c12 = st.columns([3, 1])
+    with c12:
+        grads_only = st.toggle("Bachelor's degree holders only", value=False)
+        quintile = st.select_slider(
+            "Exposure fifth", options=[1, 2, 3, 4, 5], value=5,
+            format_func=lambda q: {1: "1 (least)", 5: "5 (most)"}.get(q, str(q)),
+        )
+        st.caption("12-month averages, indexed so each age group's 2022 average = 100.")
+    with c11:
+        shares = exposed_share_index(exposure_table, quintile=quintile, bachelors_only=grads_only)
+        shares = shares[["22-25", "26-30", "31-40", "41+"]]
+        shares.index.name = "Date"
+        long_df = shares.reset_index().melt("Date", var_name="Age", value_name="Index")
+        lines = alt.Chart(long_df).mark_line().encode(
+            x=alt.X("Date:T", title=""),
+            y=alt.Y("Index:Q", title="Share in this fifth (2022 = 100)", scale=alt.Scale(zero=False)),
+            color=alt.Color("Age:N", sort=["22-25", "26-30", "31-40", "41+"],
+                            scale=alt.Scale(range=["#d62728", "#ff7f0e", "#9e9e9e", "#616161"]),
+                            legend=alt.Legend(orient="bottom", title="Age")),
+            strokeWidth=alt.condition(alt.datum.Age == "22-25", alt.value(3), alt.value(1.5)),
+            tooltip=["Date:T", "Age:N", alt.Tooltip("Index:Q", format=".1f")],
+        )
+        chatgpt = alt.Chart(pd.DataFrame({"x": [pd.Timestamp("2022-11-30")]})).mark_rule(
+            color="#673ab7", strokeDash=[6, 4]).encode(x="x:T")
+        st.altair_chart((lines + chatgpt).properties(height=380), width="stretch")
+
+    latest = shares.iloc[-1]
+    m1, m2, m3 = st.columns(3)
+    signed = lambda x: f"{round(x, 1) + 0:+.1f}"  # + 0 turns -0.0 into 0.0
+    m1.metric("Ages 22-25 vs. 2022", f"{signed(latest['22-25'] - 100)}%")
+    m2.metric("Ages 41+ vs. 2022", f"{signed(latest['41+'] - 100)}%")
+    m3.metric("Young minus old", f"{signed(latest['22-25'] - latest['41+'])} pts")
+    st.caption(
+        f"Through {shares.index[-1]:%b %Y}. The survey has roughly 500-900 employed 22-25 year olds per "
+        "fifth each month (far fewer with the degree filter on), so moves of a few points are within "
+        "the noise. Purple line = ChatGPT's release."
+    )

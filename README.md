@@ -14,6 +14,7 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 * **Labor health:** Recent graduate unemployment, average wage growth, corporate profits, and labor's share of output.
 * **Micro tech trends:** Layoffs and hiring demand specifically within the Information Sector (software, data, and web).
 * **The graduate squeeze:** Recent-grad unemployment versus all workers, grad underemployment, and outcomes by college major (is Computer Science still a safe bet?).
+* **Canaries in AI-exposed jobs:** Whether young workers are losing ground in the occupations most exposed to LLMs, compared with older workers in the same jobs. More on this below.
 
 ### How the risk index works
 
@@ -28,10 +29,25 @@ Every factor gets put on the same footing before it's combined:
 
 Quarterly series fill the months inside their own quarter and nothing past it, so the index is monthly and ends at the last month every factor has data for. The math lives in `risk_index.py`, which both the dashboard and `make_hero.py` import.
 
+### Are young workers being pushed out of AI-exposed jobs?
+
+The risk index only uses aggregate numbers, so it can't tell AI apart from an ordinary profit cycle. Phase 5 runs a sharper test, borrowed from Brynjolfsson, Chandar & Chen's *Canaries in the Coal Mine* (2025). They used ADP payroll data and found that 22-25 year olds lost ground in the most AI-exposed occupations while older workers in those same jobs didn't.
+
+This version rebuilds that test from public data:
+
+1. Every month of the Census Current Population Survey since 2015 (about 50,000 employed people a month) gives each worker's age, education, and occupation.
+2. Each occupation gets an LLM exposure score from [Eloundou et al. (2023)](https://arxiv.org/abs/2303.10130). Census occupation codes changed in 2020, so the 2015-2019 files go through the Census 2010-to-2018 crosswalk. Every employed person in both eras ends up with a score.
+3. Occupations are split into fifths so each held about 20% of workers in 2019.
+4. The chart shows what share of each age group works in a given fifth, indexed so 2022 = 100. Using shares instead of headcounts cancels out anything that hits a whole age group at once, like a recession or a smaller graduating class.
+
+It's noisier than ADP's data. There are only a few hundred 22-25 year olds per fifth each month, which is why everything is a 12-month average.
+
 ### Where the data comes from
 
 * **FRED (Federal Reserve Economic Data):** Used for the high-level macro series like productivity, wages, and capital investment.
 * **BLS (Bureau of Labor Statistics):** Used for highly specific JOLTS data. It uses the 21-character series IDs to isolate layoffs and job openings strictly within the Information Sector.
+* **Census CPS microdata:** The monthly [Current Population Survey public-use files](https://www.census.gov/data/datasets/time-series/demo/cps/cps-basic.html), about 12MB each, no key required.
+* **GPTs are GPTs (OpenAI / UPenn):** Occupation-level LLM exposure scores, the GPT-4 rated beta measure.
 * **NY Fed (Federal Reserve Bank of New York):** The [Labor Market for Recent College Graduates](https://www.newyorkfed.org/research/college-labor-market) dataset: monthly unemployment and underemployment for recent grads since 1990, plus outcomes broken down by college major. No API key required.
 
 ### Project Structure
@@ -41,6 +57,7 @@ Quarterly series fill the months inside their own quarter and nothing past it, s
 * `macro_tracker.py`: Handles the FRED connections and aligns the historical data to a fixed starting date. Uses the official API if you have a key, otherwise FRED's public CSV download.
 * `bls_extractor.py`: Connects to the BLS API to pull sector-specific labor turnover.
 * `nyfed_extractor.py`: Downloads the NY Fed college labor market Excel workbook and parses the unemployment, underemployment, and outcomes-by-major sheets.
+* `cps_extractor.py`: Downloads the CPS microdata, scores each occupation's AI exposure, and writes the small summary table in `data/ai_exposure_employment.csv` that the dashboard reads.
 * `make_hero.py`: Rebuilds `docs/hero.png` from live data using the same index math as the dashboard.
 
 ### How to run this locally
@@ -58,7 +75,13 @@ FRED_API_KEY=your_fred_key
 BLS_API_KEY=your_bls_key
 ```
 
-**3. Launch the dashboard**
+**3. (Optional) Refresh the CPS data**
+The summary table is checked in, so the dashboard works right away. To add new months (Census publishes around the third week of the following month), run this. The first run downloads the full history, about 1.7GB, and later runs only fetch what's new:
+```bash
+python cps_extractor.py
+```
+
+**4. Launch the dashboard**
 ```bash
 streamlit run app.py
 ```

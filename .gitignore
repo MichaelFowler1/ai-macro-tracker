@@ -12,3 +12,7 @@ __pycache__/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# CPS microdata extracts (rebuilt by cps_extractor.py)
+data/cps_cache/
+data/crosswalk/
