@@ -7,8 +7,8 @@ plus the NY Fed college labor market workbook — and computes the composite
 AI Displacement Risk Index with the app's REAL logic (normalize_series ->
 Z-scores, the same +/- signs and weighted sum from app.py, all weights 1.0).
 
-Run:  python make_hero.py     (needs the app's requirements + matplotlib,
-                               and FRED_API_KEY in .env)
+Run:  python make_hero.py     (needs the app's requirements + matplotlib;
+                               FRED_API_KEY in .env is optional)
 """
 import os
 from datetime import date
@@ -38,9 +38,7 @@ def normalize_series(series):
 
 # --- pull everything live ---
 load_dotenv()
-api_key = os.getenv("FRED_API_KEY")
-if not api_key:
-    raise SystemExit("FRED_API_KEY not found in .env")
+api_key = os.getenv("FRED_API_KEY")  # optional, see macro_tracker.py
 
 print("[*] Pulling FRED data...")
 macro = fetch_all_macro_data(api_key)

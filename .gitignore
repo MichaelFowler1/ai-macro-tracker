@@ -9,3 +9,6 @@ env/
 # Python Cache (hidden files Python creates to run faster)
 __pycache__/
 *.pyc
+
+# Jupyter
+.ipynb_checkpoints/

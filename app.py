@@ -14,16 +14,14 @@ load_dotenv()
 st.set_page_config(page_title="AI Job Impact Tracker", layout="wide")
 
 # --- DATA LOADING & SETUP ---
-API_KEY = os.getenv("FRED_API_KEY")
-if not API_KEY:
-    st.error("FRED API Key not found in .env. Please check your credentials.")
-    st.stop()
+API_KEY = os.getenv("FRED_API_KEY")  # optional; without it FRED is read via the keyless CSV endpoint
 
-@st.cache_data
+# Every source publishes monthly at most, so re-download at most daily
+@st.cache_data(ttl=24 * 3600)
 def load_macro_data():
     return fetch_all_macro_data(API_KEY)
 
-@st.cache_data
+@st.cache_data(ttl=24 * 3600)
 def load_bls_tech_data():
     layoffs = fetch_bls_data('JTS510000000000000LDL')  # Information Sector Layoffs
     openings = fetch_bls_data('JTS510000000000000JOL') # Information Sector Job Openings
@@ -207,7 +205,7 @@ c4, c5, c6 = st.columns(3)
 with c4:
     st.subheader("Recent Grad Unemployment")
     plot_locked_chart(macro_data["grad_unemp"], "#9467bd")
-    change = get_yoy_change(macro_data["grad_unemp"], periods=4) 
+    change = get_yoy_change(macro_data["grad_unemp"], periods=12)
     st.metric("Latest Rate", f"{macro_data['grad_unemp'].iloc[-1]:.1f}%", f"{change:.2f}% YoY" if change else "N/A")
 
 with c5:

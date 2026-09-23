@@ -1,14 +1,35 @@
+import io
 import pandas as pd
 import os
+import requests
 from dotenv import load_dotenv
 from fredapi import Fred
 
-def fetch_all_macro_data(api_key, start_date="2014-01-01"):
+# FRED's public chart-download endpoint. Needs no API key, so the dashboard
+# still runs for anyone who clones the repo without registering for one.
+FREDGRAPH_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+
+
+def _get_series_keyless(series_id, start_date):
+    """Same result as Fred.get_series, pulled from the keyless CSV endpoint."""
+    resp = requests.get(FREDGRAPH_URL, params={"id": series_id, "cosd": start_date}, timeout=30)
+    resp.raise_for_status()
+    df = pd.read_csv(io.StringIO(resp.text), index_col=0, parse_dates=True)
+    # Missing observations come through as "." so coerce them to NaN
+    return pd.to_numeric(df.iloc[:, 0], errors="coerce")
+
+
+def fetch_all_macro_data(api_key=None, start_date="2014-01-01"):
     """
     Fetches raw macroeconomic indicators from FRED starting from a fixed date.
+    Uses the official API when api_key is set, otherwise the keyless CSV endpoint.
     Returns a dictionary of raw Pandas Series.
     """
-    fred = Fred(api_key=api_key)
+    if api_key:
+        fred = Fred(api_key=api_key)
+        get_series = lambda sid: fred.get_series(sid, observation_start=start_date)
+    else:
+        get_series = lambda sid: _get_series_keyless(sid, start_date)
     data = {}
     
     # 1. Define the series we want to track
@@ -31,7 +52,7 @@ def fetch_all_macro_data(api_key, start_date="2014-01-01"):
     for key, series_id in series_map.items():
         try:
             # observation_start guarantees all series anchor to the same timeline
-            data[key] = fred.get_series(series_id, observation_start=start_date)
+            data[key] = get_series(series_id)
         except Exception as e:
             print(f"Warning: Failed to fetch {key} ({series_id}). Error: {e}")
             data[key] = pd.Series(dtype=float)
@@ -65,13 +86,12 @@ if __name__ == "__main__":
     load_dotenv()
     MY_API_KEY = os.getenv("FRED_API_KEY") 
     
-    if MY_API_KEY:
-        try:
-            fetched_data = fetch_all_macro_data(MY_API_KEY)
-            print("\nData pull successful! Validated Series Shapes:")
-            for key, series in fetched_data.items():
-                print(f" - {key}: {len(series)} data points")
-        except Exception as e:
-            print(f"Critical Error during execution: {e}")
-    else:
-        print("Error: Could not find FRED_API_KEY in your .env file.")
+    if not MY_API_KEY:
+        print("No FRED_API_KEY in .env, using the keyless CSV endpoint.")
+    try:
+        fetched_data = fetch_all_macro_data(MY_API_KEY)
+        print("\nData pull successful! Validated Series Shapes:")
+        for key, series in fetched_data.items():
+            print(f" - {key}: {len(series)} data points")
+    except Exception as e:
+        print(f"Critical Error during execution: {e}")
