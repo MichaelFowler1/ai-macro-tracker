@@ -43,7 +43,8 @@ def fetch_all_macro_data(api_key=None, start_date="2014-01-01"):
         "grad_unemp_25o": "CGBD25O",     # Bachelor's, 25 and over
         "master_unemp_25o": "CGMD25O",   # Master's, 25 and over
         "wages": "CES0500000003",        # Avg Hourly Earnings
-        "profits": "CP"                  # Corporate Profits
+        "profits": "CP",                 # Corporate Profits
+        "cpi": "CPIAUCSL"                # CPI, to turn nominal growth into real growth
     }
 
     print("Connecting to FRED API...")
@@ -79,7 +80,8 @@ def fetch_all_macro_data(api_key=None, start_date="2014-01-01"):
         "grad_unemp_25o": data["grad_unemp_25o"],
         "master_unemp_25o": data["master_unemp_25o"],
         "wages": data["wages"],
-        "profits": data["profits"]
+        "profits": data["profits"],
+        "cpi": data["cpi"]
     }
 
 if __name__ == "__main__":

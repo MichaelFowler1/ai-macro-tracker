@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from macro_tracker import fetch_all_macro_data
 from bls_extractor import fetch_bls_data
 from nyfed_extractor import fetch_college_labor_data
+from risk_index import FACTORS, BASELINE, factor_scores, risk_index
 
 # Load environment variables
 load_dotenv()
@@ -60,13 +61,10 @@ start_datetime = pd.to_datetime(start_date)
 
 st.sidebar.header("2. Index Weights")
 st.sidebar.write("Adjust the importance of each pillar in the composite Risk Index.")
-w_tech = st.sidebar.slider("Tech Investment (+)", 0.0, 2.0, 1.0, 0.1)
-w_prod = st.sidebar.slider("Productivity (+)", 0.0, 2.0, 1.0, 0.1)
-w_jobs = st.sidebar.slider("Job Openings Rate (-)", 0.0, 2.0, 1.0, 0.1)
-w_unemp = st.sidebar.slider("Grad Unemployment (+)", 0.0, 2.0, 1.0, 0.1)
-w_wage = st.sidebar.slider("Wage Growth (-)", 0.0, 2.0, 1.0, 0.1)
-w_prof = st.sidebar.slider("Corporate Profits (+)", 0.0, 2.0, 1.0, 0.1)
-w_underemp = st.sidebar.slider("Grad Underemployment (+)", 0.0, 2.0, 1.0, 0.1)
+weights = {
+    key: st.sidebar.slider(f"{label} ({'+' if sign > 0 else '-'})", 0.0, 2.0, 1.0, 0.1)
+    for key, (label, sign, _, _) in FACTORS.items()
+}
 
 # --- APPLY FILTERS ---
 macro_data = {}
@@ -132,43 +130,36 @@ def get_yoy_change(series, periods=4):
     except Exception:
         return 0
 
-def normalize_series(series):
-    """Converts raw data to Z-scores so distinct units can be combined."""
-    if series.std() == 0 or len(series) < 2: 
-        return series * 0
-    return (series - series.mean()) / series.std()
-
 # --- DYNAMIC INDEX CALCULATION ---
-try:
-    index_factors = {
-        'tech': normalize_series(macro_data["total_tech_investment"]) * w_tech,
-        'prod': normalize_series(macro_data["productivity"]) * w_prod,
-        'jobs': -normalize_series(macro_data["job_openings_rate"]) * w_jobs,
-        'unemp': normalize_series(macro_data["grad_unemp"]) * w_unemp,
-        'wage': -normalize_series(macro_data["wages"]) * w_wage,
-        'prof': normalize_series(macro_data["profits"]) * w_prof
-    }
+# Scored on the full history (the baseline is fixed at 2015-2019), then cropped
+# to the start date, so moving the date doesn't change any values.
+index_sources = dict(raw_macro_data)
+if raw_nyfed_data is not None:
     # Underemployment (grads stuck in jobs not requiring a degree) captures
     # displacement that never shows up in the unemployment rate.
-    if not nyfed_underemp.empty:
-        index_factors['underemp'] = normalize_series(nyfed_underemp["Recent graduates"]) * w_underemp
+    index_sources["underemp"] = raw_nyfed_data["underemployment"]["Recent graduates"]
 
-    df_index = pd.DataFrame(index_factors).dropna()
-    df_index['Dynamic_Risk_Score'] = df_index.sum(axis=1)
-except KeyError:
-    st.error("Missing expected data keys. Check API limits or variable names.")
-    st.stop()
+all_scores = factor_scores(index_sources)
+contributions = all_scores.mul(pd.Series(weights)[all_scores.columns], axis=1)
+contributions = contributions[contributions.index >= start_datetime]
+risk_score = risk_index(all_scores, weights)
+risk_score = risk_score[risk_score.index >= start_datetime]
 
 # --- MAIN UI ---
 st.title("Macro Indicators of AI Job Displacement")
 st.write("Tracking the economic footprint of automation.")
 
-n_factors = len(index_factors)
+n_factors = all_scores.shape[1]
 st.header("The AI Displacement Risk Index (Dynamic)")
-st.write(f"A composite index tracking {n_factors} macro-factors. **Rising values** indicate labor losing leverage to tech capital.")
+st.write(
+    f"A composite of {n_factors} factors, each measured in standard deviations from its "
+    f"{BASELINE[0][:4]}-{BASELINE[1][:4]} average. **0 is the pre-pandemic normal**; "
+    "rising values mean labor is losing leverage to tech capital. Dollar series are growth rates "
+    "net of CPI inflation, so they don't trend up on their own."
+)
 
-if not df_index.empty:
-    idx_df = df_index['Dynamic_Risk_Score'].reset_index()
+if not risk_score.empty:
+    idx_df = risk_score.reset_index()
     idx_df.columns = ["Date", "Value"]
     index_chart = alt.Chart(idx_df).mark_area(
         color="#673ab7", line={'color': '#4527a0'}, opacity=0.3
@@ -177,7 +168,20 @@ if not df_index.empty:
         y=alt.Y("Value:Q", title="Relative Risk Score", scale=alt.Scale(zero=False)),
         tooltip=["Date:T", alt.Tooltip("Value:Q", format=".2f")]
     ).properties(height=350) 
-    st.altair_chart(index_chart, width="stretch")
+    zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color="#9e9e9e", strokeDash=[4, 4]).encode(y="y:Q")
+    st.altair_chart(index_chart + zero, width="stretch")
+
+    latest = contributions.iloc[-1].rename(index={k: FACTORS[k][0] for k in FACTORS}).reset_index()
+    latest.columns = ["Factor", "Contribution"]
+    st.subheader(f"What's driving it ({contributions.index[-1]:%b %Y})")
+    st.write("Each factor's weighted Z-score. Bars to the right push the index up.")
+    drivers = alt.Chart(latest).mark_bar().encode(
+        x=alt.X("Contribution:Q", title="Weighted Z-score"),
+        y=alt.Y("Factor:N", sort="-x", title=""),
+        color=alt.condition(alt.datum.Contribution > 0, alt.value("#d62728"), alt.value("#2ca02c")),
+        tooltip=["Factor:N", alt.Tooltip("Contribution:Q", format="+.2f")]
+    ).properties(height=250)
+    st.altair_chart(drivers, width="stretch")
 else:
     st.warning("Not enough data points in this timeframe to calculate the index.")
 

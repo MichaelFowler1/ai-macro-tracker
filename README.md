@@ -6,7 +6,7 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 
 ![AI Displacement Risk Index dashboard](docs/hero.png)
 
-*The composite risk index is computed with `app.py`'s real Z-score formula over the 7 weighted factors, from live data pulled from FRED and the NY Fed at generation time. Regenerate with `python make_hero.py`.*
+*The composite risk index over the 7 factors, all weights at 1, from live FRED and NY Fed data pulled at generation time. It uses the same `risk_index.py` as the dashboard. Regenerate with `python make_hero.py`.*
 
 ### What it tracks
 
@@ -14,6 +14,18 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 * **Labor health:** Recent graduate unemployment, average wage growth, and corporate profits.
 * **Micro tech trends:** Layoffs and hiring demand specifically within the Information Sector (software, data, and web).
 * **The graduate squeeze:** Recent-grad unemployment versus all workers, grad underemployment, and outcomes by college major (is Computer Science still a safe bet?).
+
+### How the risk index works
+
+Every factor gets put on the same footing before it's added up:
+
+1. **Things that grow on their own become growth rates.** Tech investment, productivity, wages, and corporate profits all trend up over time no matter what AI is doing, so the index uses their year-over-year growth instead. The three dollar series have CPI inflation subtracted, which matters a lot in 2021-2023: nominal wages were rising fast but real wages were falling.
+2. **Rates stay as rates.** The job openings rate, recent-grad unemployment, and grad underemployment already mean something on their own. Grad unemployment isn't seasonally adjusted, so it gets a 3-month average.
+3. **Everything is scored against 2015-2019.** Each factor becomes a Z-score relative to its pre-pandemic, pre-LLM average. So 0 is "normal," and +2 means two standard deviations worse for labor than that stretch was.
+4. **Signs point the same way.** Factors where a higher number is good for workers (job openings, real wage growth) are flipped, so up always means more risk.
+5. **Weighted sum.** The sidebar sliders set each factor's weight. Changing the start date only crops the chart; it doesn't rescore anything.
+
+Quarterly series fill the months inside their own quarter and nothing past it, so the index is monthly and ends at the last month every factor has data for. The math lives in `risk_index.py`, which both the dashboard and `make_hero.py` import.
 
 ### Where the data comes from
 
@@ -23,7 +35,8 @@ It tracks a mix of macroeconomic indicators and micro-level labor data, and calc
 
 ### Project Structure
 
-* `app.py`: The main Streamlit dashboard containing the UI, charts, and the dynamic Z-score index calculator.
+* `app.py`: The main Streamlit dashboard containing the UI, charts, and index controls.
+* `risk_index.py`: Turns the raw series into baseline Z-scores and the weighted risk index.
 * `macro_tracker.py`: Handles the FRED connections and aligns the historical data to a fixed starting date. Uses the official API if you have a key, otherwise FRED's public CSV download.
 * `bls_extractor.py`: Connects to the BLS API to pull sector-specific labor turnover.
 * `nyfed_extractor.py`: Downloads the NY Fed college labor market Excel workbook and parses the unemployment, underemployment, and outcomes-by-major sheets.
